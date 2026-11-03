@@ -1,0 +1,9 @@
+{
+  "appId": "com.ayutube.app",
+  "appName": "AyuTube",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "server": {
+    "androidScheme": "https"
+  }
+}

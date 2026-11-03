@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+
+  <meta
+    name="description"
+    content="AyuTube: cartoons, mathematics, coding, puzzles and facts, in one calm place."
+  >
+  <meta name="application-name" content="AyuTube">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="AyuTube">
+  <meta
+    property="og:description"
+    content="Cartoons, mathematics, coding, puzzles and facts, in one calm place."
+  >
+
+  <title>AyuTube</title>
+
+  <link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/icons/favicon.png" type="image/png" sizes="64x64">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Sacramento&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+
+<body>
+  <div class="app">
+    <header class="rail">
+      <a class="brand" href="/" aria-label="AyuTube home">
+        <img
+          class="brand-mark"
+          src="/assets/icons/logo.svg"
+          alt=""
+          width="36"
+          height="21"
+        >
+        <span class="brand-name">ayutube</span>
+      </a>
+
+      <!-- Tabs are rendered by app.js: bottom bar on phones, side rail on desktop. -->
+      <nav id="ayutube-tabs" class="ay-tabs" aria-label="Main navigation"></nav>
+
+      <!-- Shown while a video is loaded but its watch page is not on screen. -->
+      <div id="now-playing" class="now-playing" hidden></div>
+    </header>
+
+    <main id="main" class="stage">
+      <noscript>
+        <p class="status">Turn on JavaScript to use ayutube.</p>
+      </noscript>
+
+      <form
+        id="search-form"
+        class="search"
+        role="search"
+        autocomplete="off"
+      >
+        <label class="sr-only" for="search-input">Search videos</label>
+
+        <div class="search-field">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="10.5" cy="10.5" r="6.5"></circle>
+            <path d="m15.5 15.5 5.5 5.5"></path>
+          </svg>
+
+          <input
+            id="search-input"
+            name="q"
+            type="search"
+            placeholder="Search videos"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            maxlength="200"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="search-suggest"
+            required
+          >
+
+          <button id="search-button" type="submit">Search</button>
+        </div>
+
+        <div
+          id="search-suggest"
+          class="suggest"
+          role="listbox"
+          aria-label="Search suggestions"
+          hidden
+        ></div>
+      </form>
+
+      <!-- Category strip is rendered by app.js -->
+
+      <p
+        id="status"
+        class="status"
+        aria-live="polite"
+        aria-atomic="true"
+      ></p>
+
+      <section id="feed" class="feed" aria-label="Recommended videos"></section>
+
+      <section
+        id="results"
+        class="results"
+        aria-label="Video search results"
+        hidden
+      ></section>
+
+      <section
+        id="channel-pane"
+        class="channel"
+        aria-label="Channel"
+        hidden
+      ></section>
+
+      <section
+        id="playlist-pane"
+        class="channel"
+        aria-label="Playlist"
+        hidden
+      ></section>
+
+      <!-- Watch page. player.js owns this element's visibility. -->
+      <section
+        id="player-panel"
+        class="watch"
+        aria-label="Video player"
+        hidden
+      >
+        <div class="watch-player">
+          <div class="video-frame">
+
+            <div
+              id="player-message"
+              class="player-message"
+              role="status"
+              aria-live="polite"
+              hidden
+            ></div>
+          </div>
+        </div>
+
+        <div class="watch-body">
+        <div class="watch-info">
+          <div class="watch-head">
+            <h2 id="player-title" class="watch-title"></h2>
+
+            <button id="close-player" class="ay-action" type="button">
+              Close
+            </button>
+          </div>
+
+          <button id="player-channel" class="watch-channel" type="button"></button>
+
+          <div id="watch-actions" class="watch-actions"></div>
+
+          <a
+            id="watch-youtube"
+            class="watch-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          >
+            Open on YouTube
+          </a>
+
+          <section id="watch-notes" class="watch-notes" hidden></section>
+        </div>
+
+        <aside id="watch-next" class="watch-next" aria-label="Up next">
+          <h3 class="watch-next-title">Up next</h3>
+          <div id="up-next" class="up-next"></div>
+        </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Load modules in dependency order. app.js goes last. -->
+  <script src="/assets/js/native.js"></script>
+  <script src="/assets/js/avatars.js"></script>
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/stream-select.js"></script>
+  <script src="/assets/js/player.js"></script>
+  <script src="/assets/js/categories.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/library.js"></script>
+  <script src="/assets/js/cards.js"></script>
+  <script src="/assets/js/feed.js"></script>
+  <script src="/assets/js/watch.js"></script>
+  <script src="/assets/js/channel.js"></script>
+  <script src="/assets/js/playlist.js"></script>
+  <script src="/assets/js/following.js"></script>
+  <script src="/assets/js/welcome.js"></script>
+  <script src="/assets/js/onboarding.js"></script>
+  <script src="/assets/js/account-ui.js"></script>
+  <script src="/assets/js/library-ui.js"></script>
+  <script src="/assets/js/search-ui.js"></script>
+  <script src="/assets/js/study.js"></script>
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>
