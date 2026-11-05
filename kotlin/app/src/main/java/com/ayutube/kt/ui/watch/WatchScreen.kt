@@ -14,9 +14,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.palette.graphics.Palette
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -300,36 +303,53 @@ fun WatchScreen(
             }
         }.getOrDefault(0)
 
-        if (picked != 0) ambient = lerp(Ay.Ink, Color(picked or 0xFF000000.toInt()), 0.5f)
+        if (picked != 0) ambient = lerp(Ay.Ink, Color(picked or 0xFF000000.toInt()), 0.6f)
     }
 
-    // Dragging the player down: the video follows the finger toward the middle of the screen, the rest fades
-    // away and the ambient colour shows around it. Let go past the line and the video is minimised.
+    // Pull the player down: it grows into a tall view with the video in the middle and the ambient colour around it,
+    // and it stays there. Pull it up (or press back) to return. Only the middle of the player does this; the left
+    // edge stays brightness and the right edge stays volume.
     val density = LocalDensity.current
-    var dragPx by remember(video.id) { mutableFloatStateOf(0f) }
-    val dragProgress = (dragPx / with(density) { 260.dp.toPx() }).coerceIn(0f, 1f)
+    var expand by remember { mutableFloatStateOf(0f) }
+    var rootSize by remember { mutableStateOf(IntSize.Zero) }
+    val statusTop = WindowInsets.statusBars.getTop(density)
 
-    fun snapBack() {
-        scope.launch { animate(initialValue = dragPx, targetValue = 0f, animationSpec = tween(180)) { value, _ -> dragPx = value } }
+    fun animateExpand(target: Float) {
+        scope.launch { animate(initialValue = expand, targetValue = target, animationSpec = tween(220)) { value, _ -> expand = value } }
     }
+
+    fun settle(start: Float) {
+        animateExpand(
+            when {
+                expand - start > 0.12f -> 1f
+                start - expand > 0.12f -> 0f
+                else -> if (start > 0.5f) 1f else 0f
+            }
+        )
+    }
+
+    BackHandler(enabled = expand > 0.5f && !fullscreen && sheet == null) { animateExpand(0f) }
 
     val duration = session.durationMs
     val position = session.positionMs
 
     Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(0f to ambientColor, 0.55f to Ay.Ink, 1f to Ay.Ink))
+        Modifier.fillMaxSize().onSizeChanged { rootSize = it }
+            .background(Brush.verticalGradient(0f to ambientColor, 0.55f to Ay.Ink, 1f to Ay.Ink))
     ) {
         // ---- the player
         Box(
             Modifier.fillMaxWidth()
-                .then(if (fullscreen) Modifier.fillMaxHeight() else Modifier.statusBarsPadding().aspectRatio(16f / 9f))
-                .graphicsLayer {
-                    translationY = dragPx
-                    transformOrigin = TransformOrigin(0.5f, 0f)
-                    scaleX = 1f - dragProgress * 0.12f
-                    scaleY = 1f - dragProgress * 0.12f
-                }
-                .background(Color.Black)
+                .then(
+                    when {
+                        fullscreen -> Modifier.fillMaxHeight()
+                        rootSize.width > 0 -> Modifier.statusBarsPadding().height(
+                            with(density) { lerp(rootSize.width * 9f / 16f, (rootSize.height - statusTop).toFloat(), expand).toDp() }
+                        )
+                        else -> Modifier.statusBarsPadding().aspectRatio(16f / 9f)
+                    }
+                )
+                .background(Color.Black.copy(alpha = 1f - expand))
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
@@ -359,29 +379,33 @@ fun WatchScreen(
                     )
                 }
                 .pointerInput(fullscreen) {
-                    if (fullscreen) {
-                        // Fullscreen: left side is brightness, right side is volume.
-                        var left = true
+                    var mode = 0 // 0 brightness, 1 volume, 2 pull
+                    var start = 0f
+                    val range = 300.dp.toPx()
 
-                        detectVerticalDragGestures(
-                            onDragStart = { left = it.x < size.width / 2 },
-                            onVerticalDrag = { _, dy ->
+                    detectVerticalDragGestures(
+                        onDragStart = { at ->
+                            mode = if (fullscreen) {
+                                if (at.x < size.width / 2) 0 else 1
+                            } else when {
+                                at.x < size.width * 0.3f -> 0
+                                at.x > size.width * 0.7f -> 1
+                                else -> 2
+                            }
+                            start = expand
+                        },
+                        onDragEnd = { if (mode == 2) settle(start) },
+                        onDragCancel = { if (mode == 2) settle(start) },
+                        onVerticalDrag = { _, dy ->
+                            if (mode == 2) {
+                                expand = (expand + dy / range).coerceIn(0f, 1f)
+                            } else {
                                 val change = -dy / size.height.toFloat()
 
-                                if (left) adjustBrightness(change) else adjustVolume(change)
+                                if (mode == 0) adjustBrightness(change) else adjustVolume(change)
                             }
-                        )
-                    } else {
-                        // Normal view: drag down to minimise.
-                        val limit = 320.dp.toPx()
-                        val release = 110.dp.toPx()
-
-                        detectVerticalDragGestures(
-                            onDragEnd = { if (dragPx > release) onClose() else snapBack() },
-                            onDragCancel = { snapBack() },
-                            onVerticalDrag = { _, dy -> dragPx = (dragPx + dy).coerceIn(0f, limit) }
-                        )
-                    }
+                        }
+                    )
                 }
         ) {
             AndroidView(
@@ -539,7 +563,7 @@ fun WatchScreen(
 
         // ---- everything below the player
         if (!fullscreen) {
-            LazyColumn(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - dragProgress }) {
+            LazyColumn(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - expand }) {
                 item {
                     Column(Modifier.clickable { descOpen = !descOpen }.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Text(
