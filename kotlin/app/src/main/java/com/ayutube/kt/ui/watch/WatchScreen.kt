@@ -12,6 +12,17 @@ import com.ayutube.kt.player.PlaybackSession
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.palette.graphics.Palette
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import android.graphics.drawable.BitmapDrawable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
@@ -271,14 +282,53 @@ fun WatchScreen(
         hud = "Volume ${(volume * 100).roundToInt()}%"
     }
 
+    // Ambient colour: one colour picked from the thumbnail when a video opens (no per-frame work), shown softly
+    // behind and around the video, the way YouTube tints the page.
+    var ambient by remember(video.id) { mutableStateOf(Ay.Ink) }
+    val ambientColor by animateColorAsState(ambient, tween(700), label = "ambient")
+
+    LaunchedEffect(video.id) {
+        val picked = runCatching {
+            val request = ImageRequest.Builder(context).data(video.thumbnail).allowHardware(false).size(120).build()
+            val result = coil.Coil.imageLoader(context).execute(request)
+            val bitmap = ((result as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+
+            if (bitmap == null) 0 else withContext(Dispatchers.Default) {
+                val palette = Palette.from(bitmap).maximumColorCount(12).generate()
+
+                (palette.mutedSwatch ?: palette.dominantSwatch)?.rgb ?: 0
+            }
+        }.getOrDefault(0)
+
+        if (picked != 0) ambient = lerp(Ay.Ink, Color(picked or 0xFF000000.toInt()), 0.5f)
+    }
+
+    // Dragging the player down: the video follows the finger toward the middle of the screen, the rest fades
+    // away and the ambient colour shows around it. Let go past the line and the video is minimised.
+    val density = LocalDensity.current
+    var dragPx by remember(video.id) { mutableFloatStateOf(0f) }
+    val dragProgress = (dragPx / with(density) { 260.dp.toPx() }).coerceIn(0f, 1f)
+
+    fun snapBack() {
+        scope.launch { animate(initialValue = dragPx, targetValue = 0f, animationSpec = tween(180)) { value, _ -> dragPx = value } }
+    }
+
     val duration = session.durationMs
     val position = session.positionMs
 
-    Column(Modifier.fillMaxSize().background(Ay.Ink)) {
+    Column(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(0f to ambientColor, 0.55f to Ay.Ink, 1f to Ay.Ink))
+    ) {
         // ---- the player
         Box(
             Modifier.fillMaxWidth()
                 .then(if (fullscreen) Modifier.fillMaxHeight() else Modifier.statusBarsPadding().aspectRatio(16f / 9f))
+                .graphicsLayer {
+                    translationY = dragPx
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                    scaleX = 1f - dragProgress * 0.12f
+                    scaleY = 1f - dragProgress * 0.12f
+                }
                 .background(Color.Black)
                 .pointerInput(Unit) {
                     detectTapGestures(
@@ -308,17 +358,30 @@ fun WatchScreen(
                         }
                     )
                 }
-                .pointerInput(Unit) {
-                    var left = true
+                .pointerInput(fullscreen) {
+                    if (fullscreen) {
+                        // Fullscreen: left side is brightness, right side is volume.
+                        var left = true
 
-                    detectVerticalDragGestures(
-                        onDragStart = { left = it.x < size.width / 2 },
-                        onVerticalDrag = { _, dy ->
-                            val change = -dy / size.height.toFloat()
+                        detectVerticalDragGestures(
+                            onDragStart = { left = it.x < size.width / 2 },
+                            onVerticalDrag = { _, dy ->
+                                val change = -dy / size.height.toFloat()
 
-                            if (left) adjustBrightness(change) else adjustVolume(change)
-                        }
-                    )
+                                if (left) adjustBrightness(change) else adjustVolume(change)
+                            }
+                        )
+                    } else {
+                        // Normal view: drag down to minimise.
+                        val limit = 320.dp.toPx()
+                        val release = 110.dp.toPx()
+
+                        detectVerticalDragGestures(
+                            onDragEnd = { if (dragPx > release) onClose() else snapBack() },
+                            onDragCancel = { snapBack() },
+                            onVerticalDrag = { _, dy -> dragPx = (dragPx + dy).coerceIn(0f, limit) }
+                        )
+                    }
                 }
         ) {
             AndroidView(
@@ -476,7 +539,7 @@ fun WatchScreen(
 
         // ---- everything below the player
         if (!fullscreen) {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - dragProgress }) {
                 item {
                     Column(Modifier.clickable { descOpen = !descOpen }.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Text(
